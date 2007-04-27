@@ -1,7 +1,13 @@
+2007-04-27  kevin montuori  <montuori@gmail.com>
+
+	* lib/Device/Arduino/LCD.pm: fixed the convert_to_char function so
+	that characters were not mirror images; also updated
+	example/custom-char.pl
+ 
 2007-04-26  kevin montuori  <montuori@gmail.com>
 
 	* lib/Device/Arduino/LCD.pm: added bargraph and convert_to_char
-	functions; made 
+	functions; made ascii character indexing consistent.
 
 	* examples/graph.pl: added example of graph(0 and tallgraph().
 

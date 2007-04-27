@@ -3,7 +3,7 @@ package Device::Arduino::LCD;
 use strict;
 use Device::SerialPort qw[ :ALL ];
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 $|++;
 
@@ -158,16 +158,19 @@ sub make_char {
 sub convert_to_char {
   my ($self, $ascii, @lines) = @_;
   return undef unless $ascii >=0 and $ascii <= 7;
+
   my @values = ();
+
   for my $line_number (0 .. 7) { # starting at the top
     $values[$line_number] = 128;
     my $line = $lines[$line_number];
     return undef unless (ref $line eq 'ARRAY');
     my @line = @$line;
-    for (my $i=4; $i >= 0; $i--) {
-      $values[$line_number] += (2 ** $i) if lc $line[$i] eq 'x';
+    for my $i (0 .. 4) {
+      $values[$line_number] += (2 ** (4-$i)) if lc $line[$i] eq 'x';
     }
   }
+
   $self->make_char($ascii, @values);
   return \@values;
 }
