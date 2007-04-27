@@ -29,13 +29,14 @@ for my $col (0 .. 15) {
 
   # we have access to some PWM pins on the Arduino as well.
   $lcd->gauge_pct(1 => ((100/16) * $col));
-  
+
   usleep 250_000;
 }
 
 # custom characters can be created on the fly and displayed.
-$lcd->make_char(4 => 159,152,152,155,158,156,158,155);
-$lcd->place_string($lcd->usr_4, 2, 0);
+$lcd->first_line("k. with a hat.");
+$lcd->make_char(0 => 159,152,152,155,158,156,158,155);
+$lcd->write_ascii(0, 2, 0);
 
 # and the LCD & gauges can be reset.
 sleep 2;

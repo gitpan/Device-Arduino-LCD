@@ -5,7 +5,8 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME              => 'Device::Arduino::LCD',
     VERSION_FROM      => 'lib/Device/Arduino/LCD.pm', # finds $VERSION
-    PREREQ_PM         => { Device::SerialPort}, # e.g., Module::Name => 1.1
+    PREREQ_PM         => { Device::SerialPort => 0,
+			   Class::MethodMaker => 0 },
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM  => 'lib/Device/Arduino/LCD.pm', # retrieve abstract from module
        AUTHOR         => 'kevin montuori <montuori@gmail.com>') : ()),

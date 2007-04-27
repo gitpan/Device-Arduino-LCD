@@ -20,6 +20,7 @@
 #define MAKE_CHAR    0x08
 #define SEND_CMD     0x09
 #define PRINT        0x0A
+#define WRITE_ASCII  0x0B
 
 // reset the gauges and the display.
 #define RESET        0x63
@@ -78,3 +79,4 @@ void recvCharData(void);
 int defineCharacter(int ascii, int *data);
 void logoScreen(void);
 void blinkLED (int theDelay);
+void writeAscii(char *data);

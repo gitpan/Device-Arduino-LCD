@@ -3,19 +3,16 @@ package Device::Arduino::LCD;
 use strict;
 use Device::SerialPort qw[ :ALL ];
 
-our $VERSION = '1.0';
+our $VERSION = '1.01';
 
 $|++;
 
 # defaults.
-$PerLCD::Device	       = '/dev/tty.usbserial';
-$PerLCD::Baud	       = 9600;
-$PerLCD::READ_TIMEOUT  = 10;
+$Device::Arduino::LCD::Device	     = '/dev/tty.usbserial';
+$Device::Arduino::LCD::Baud	     = 9600;
+$Device::Arduino::LCD::READ_TIMEOUT  = 10;
 
-use Class::MethodMaker
-  [ new    => [ qw[ new ]],
-    scalar => [ qw[ port baud ] ]];
-
+use Class::MethodMaker [ scalar => [ qw[ port baud ] ]];
 
 use constant {
   ROW_ONE_TEXT => '01',
@@ -28,6 +25,7 @@ use constant {
   MAKE_CHAR    => '08',
   SEND_CMD     => '09',
   PRINT        => '10',
+  WRITE_ASCII  => '11',
   RESET        => '99',
 };
 
@@ -37,21 +35,11 @@ our $DATA_START   = "\x1B";
 our $DATA_END     = "\x1C";
 our $STRING_TOK   = "\x1D";
 
-
-sub usr_1 { return "\x00" }
-sub usr_2 { return "\x01" }
-sub usr_3 { return "\x02" }
-sub usr_4 { return "\x03" }
-sub usr_5 { return "\x04" }
-sub usr_6 { return "\x05" }
-sub usr_7 { return "\x06" }
-sub usr_8 { return "\x08" }
-
 sub new {
   my $class = shift;
   my ($device, $baud) = @_;
-  $device ||= $PerLCD::Device;
-  $baud   ||= $PerLCD::Baud;
+  $device ||= $Device::Arduino::LCD::Device;
+  $baud   ||= $Device::Arduino::LCD::Baud;
   my $port = Device::SerialPort->new($device)
     or die "can't open serial device: $!";
   $port->baudrate($baud);
@@ -74,7 +62,7 @@ sub encapsulate {
 sub receive {
   my $self = shift;
   my ($buffer, $chars, $timeout) = 
-    ("", 0, $PerLCD::READ_TIMEOUT);
+    ("", 0, $Device::Arduino::LCD::READ_TIMEOUT);
   while ($timeout > 0) {
     my ($count, $saw) = $self->port->read(255);
     if ($count > 0) {
@@ -151,16 +139,70 @@ sub print_char {
   $self->send(PRINT, ord(substr($char, 0, 1)));
 }
 
+sub write_ascii {
+  my ($self, $ascii, $row, $col) = @_;
+  my $payload = join $STRING_TOK => $row, $col, $ascii;
+  $self->send(WRITE_ASCII, $payload);
+}
+
 sub make_char {
   my ($self, $ascii, @data) = @_;
-  die "out out bounds" unless $ascii <= 8 and $ascii >=1;
+
+  die "out out bounds" unless $ascii <= 7 and $ascii >=0;
   @data = ref $data[0] eq 'ARRAY' ? @{ $data[0] } : @data;
   die "bad character data" unless scalar @data == 8;
-  my $payload = join $STRING_TOK => ($ascii - 1), @data;
+  my $payload = join $STRING_TOK => $ascii, @data;
   $self->send(MAKE_CHAR, $payload);
 }
 
-sub prepare_for_bargraph {
+sub convert_to_char {
+  my ($self, $ascii, @lines) = @_;
+  return undef unless $ascii >=0 and $ascii <= 7;
+  my @values = ();
+  for my $line_number (0 .. 7) { # starting at the top
+    $values[$line_number] = 128;
+    my $line = $lines[$line_number];
+    return undef unless (ref $line eq 'ARRAY');
+    my @line = @$line;
+    for (my $i=4; $i >= 0; $i--) {
+      $values[$line_number] += (2 ** $i) if lc $line[$i] eq 'x';
+    }
+  }
+  $self->make_char($ascii, @values);
+  return \@values;
+}
+
+
+
+# bargraph support.
+
+sub graph {
+  my ($self, $val, $row, $col) = @_;
+  if ($val == 0) { # print a space.
+    $self->place_string(" ", $row, $col);
+  }
+  elsif ($val <= 8) {
+    $self->write_ascii($val - 1, $row, $col);
+  }
+}
+
+sub tallgraph {
+  my ($self, $val, $col) = @_;
+  if ($val == 0) {
+    $self->place_string(" ", 1, $col);
+    $self->place_string(" ", 2, $col);
+  }
+  elsif ($val <= 8) {
+    $self->place_string(" ",      1, $col);
+    $self->write_ascii($val - 1,  2, $col);
+  }
+  elsif ($val <= 16) {
+    $self->write_ascii($val - 9, 1, $col);
+    $self->write_ascii(7,        2, $col);
+  }
+}
+
+sub init_bargraph {
   my ($self) = shift;
   my $data = [ [128,128,128,128,128,128,128,159],
 	       [128,128,128,128,128,128,159,159],
@@ -170,7 +212,7 @@ sub prepare_for_bargraph {
 	       [128,128,159,159,159,159,159,159],
 	       [128,159,159,159,159,159,159,159],
 	       [159,159,159,159,159,159,159,159] ];
-  my $i = 1;
+  my $i = 0;
   for (@$data) { $self->make_char($i++, $_) };
 }
 
@@ -299,11 +341,61 @@ of the display.
 =head2 make_char(Device::Arduino::LCD, ascii-num, data)
 
 Installs data (an eight element array or array ref) as ascii character
-ascii-num.
+0 - 7.  (NB: the LCD allows eight characters, ASCII 0-7 to be defined
+by the user; that's what make_char and write_ascii as well as the
+bargraph functions are all about.)
 
-=head2 usr_1(), usr_2(), ..., usr_8()
+=head2 write_ascii(Device::Arduino::LCD, ascii-num, row, col)
 
-Returns the ascii character 0 .. 7
+Prints the ascii character (0-7) at row, col.  This is particularly
+useful for printing the custom characters created with make_char().
+
+=head2 init_bargraph(Device::Arduino::LCD);
+
+Defines eight custom characters (overwriting whatever's been defined
+before) as a series of bars for use in graphing.
+
+=head2 graph(Device::Arduino::LCD, value, row, column);
+
+With values ranging from 0 - 8 prints that many solid horizontal bars
+(starting at the bottom) in the position indicated.  So 
+
+  $lcd->graph(2, 1, 0); $lcd->graph(5, 1, 1);
+
+prints this in the first and second blocks of the top row:
+
+  . . . . .  . . . . .
+  . . . . .  . . . . .
+  . . . . .  . . . . .
+  . . . . .  x x x x x
+  . . . . .  x x x x x
+  . . . . .  x x x x x
+  x x x x x  x x x x x
+  x x x x x  x x x x x
+
+=head2 tallgraph(Device::Arduino::LCD, value, column);
+
+Like graph() above but using a 16 x 5 font; the value can range from 0
+to 16.  
+
+=head2 convert_to_char(Device::Arduino::LCD, ascii-num, @data)
+
+Convert an array of arrayrefs of text to custom character ascii-num.
+A call to convert_to_char might look like.
+
+  my $ret = $lcd->convert_to_char(0,
+  				[ qw[ . x . x . ] ],
+  				[ qw[ x . x . x ] ],
+  				[ qw[ . x . x . ] ],
+  				[ qw[ x . x . x ] ],
+  				[ qw[ . x . x . ] ],
+  				[ qw[ x . x . x ] ],
+  				[ qw[ . x . x . ] ],
+  				[ qw[ x . x . x ] ]);
+
+Any position indicated by an x (or X) will be lit, everything else
+will be off.  The choice of period here is arbitrary.  To print this
+character one could say $lcd->write_ascii(0, 1, 0).
 
 =head1 PREREQUISITES
 
@@ -357,11 +449,17 @@ http://www.geocities.com/dinceraydin/lcd/intro.htm
 Erik Nordin's HD44780-Based LCD FAQ:
 http://www.repairfaq.org/filipg/LINK/F_LCD_HD44780.html
 
+=head1 BUGS
+
+Rows are are indexed from 0; columns from 1: The LCD4Bit library is
+shining through, it was kept this way for consistency but it's
+probably not very abstract or intuitive.  
+
 =head1 AUTHOR
 
 Kevin Montuori, <montuori@gmail.com>
 
-=head1 COPYRIGHT AN DLICENSE
+=head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2007 by Kevin Montuori & mconsultancy
 

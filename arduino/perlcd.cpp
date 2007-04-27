@@ -59,6 +59,9 @@ void dispatchCommand() {
   case PLACE_STRING:
     writeString(dataBuffer);
     break;
+  case WRITE_ASCII:
+    writeAscii(dataBuffer);
+    break;
   case SCROLL_LEFT:
     dataAsInt = atoi(dataBuffer);
     dataAsInt > 0 ? dataAsInt : DEFAULT_SCROLL_DELAY;
@@ -184,6 +187,15 @@ void writeString(char *data) {
   if (toks == 3) {
     moveToChar(atoi(tokens[0]), atoi(tokens[1]));
     lcd.printIn(tokens[2]);
+  }
+}
+
+void writeAscii(char *data) {
+  char *tokens[MAX_DATA_SIZE];
+  int toks = tokenizeData(tokens);
+  int asciiChar = atoi(tokens[2]);
+  if (toks == 3 && asciiChar >= 0 && asciiChar <= 127) {
+    writeCharAt(atoi(tokens[0]), atoi(tokens[1]), asciiChar);
   }
 }
 
